@@ -1,0 +1,164 @@
+{
+  "name": "2. Daily Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [ { "field": "cronExpression", "expression": "0 8 * * *" } ]
+        }
+      },
+      "id": "1",
+      "name": "Schedule (Daily 08:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT r.id, r.survey_id, r.email, r.first_name, r.token, s.title as survey_title, s.max_reminders - r.reminder_count as reminders_remaining\nFROM respondents r\nJOIN surveys s ON s.id = r.survey_id\nWHERE r.status IN ('invited', 'email_opened', 'link_opened')\nAND r.reminder_count < s.max_reminders\nAND (r.last_reminded_at IS NULL OR r.last_reminded_at < NOW() - INTERVAL '1 day' * s.reminder_interval_days)\nAND s.status = 'active';"
+      },
+      "id": "2",
+      "name": "Postgres (Get Due)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [ 450, 300 ],
+      "credentials": {
+        "postgres": { "id": "postgres", "name": "Postgres" }
+      }
+    },
+    {
+      "parameters": { "batchSize": 500, "options": {} },
+      "id": "3",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [ 650, 300 ]
+    },
+    {
+      "parameters": {
+        "resource": "email",
+        "operation": "sendTemplate",
+        "templateId": "={{ $env.BREVO_REMINDER_TEMPLATE_ID }}",
+        "recipientEmail": "={{ $json.email }}",
+        "recipientName": "={{ $json.first_name || '' }}",
+        "additionalFields": {
+          "params": {
+            "first_name": "={{ $json.first_name }}",
+            "survey_title": "={{ $json.survey_title }}",
+            "tracking_url": "={{ $env.NEXTAUTH_URL }}/r/{{ $json.token }}",
+            "reminders_remaining": "={{ $json.reminders_remaining }}"
+          }
+        }
+      },
+      "id": "4",
+      "name": "Brevo (Send Email)",
+      "type": "n8n-nodes-base.brevo",
+      "typeVersion": 1,
+      "position": [ 850, 300 ],
+      "credentials": {
+        "brevoApi": { "id": "brevo", "name": "Brevo API" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.messageId }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "7",
+      "name": "If (Success?)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [ 1050, 300 ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO webhook_mappings (message_id, respondent_id, survey_id, email)\nVALUES ($1, $2, $3, $4)\nON CONFLICT (message_id) DO NOTHING;",
+        "additionalFields": {
+          "queryParams": "={{ $json.messageId }},{{ $json.id }},{{ $json.survey_id }},{{ $json.email }}"
+        }
+      },
+      "id": "6",
+      "name": "Postgres (Store Mapping)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [ 1250, 200 ],
+      "credentials": {
+        "postgres": { "id": "postgres", "name": "Postgres" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE respondents SET reminder_count = reminder_count + 1, last_reminded_at = NOW() WHERE id = $1;\nINSERT INTO events (respondent_id, survey_id, event_type, source) VALUES ($1, $2, 'reminder_sent', 'n8n');",
+        "additionalFields": {
+          "queryParams": "={{ $json.id }},{{ $json.survey_id }}"
+        }
+      },
+      "id": "5",
+      "name": "Postgres (Update Status)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [ 1450, 200 ],
+      "credentials": {
+        "postgres": { "id": "postgres", "name": "Postgres" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO events (respondent_id, survey_id, event_type, source, metadata) \nVALUES ($1, $2, 'reminder_failed', 'n8n', $3);",
+        "additionalFields": {
+          "queryParams": "={{ $json.id }},{{ $json.survey_id }},{{ JSON.stringify($json.error || { message: 'Unknown error' }) }}"
+        }
+      },
+      "id": "8",
+      "name": "Postgres (Log Failure)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [ 1250, 450 ],
+      "credentials": {
+        "postgres": { "id": "postgres", "name": "Postgres" }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule (Daily 08:00)": {
+      "main": [ [ { "node": "Postgres (Get Due)", "type": "main", "index": 0 } ] ]
+    },
+    "Postgres (Get Due)": {
+      "main": [ [ { "node": "Split In Batches", "type": "main", "index": 0 } ] ]
+    },
+    "Split In Batches": {
+      "main": [ [ { "node": "Brevo (Send Email)", "type": "main", "index": 0 } ] ]
+    },
+    "Brevo (Send Email)": {
+      "main": [ [ { "node": "If (Success?)", "type": "main", "index": 0 } ] ]
+    },
+    "If (Success?)": {
+      "main": [
+        [ { "node": "Postgres (Store Mapping)", "type": "main", "index": 0 } ],
+        [ { "node": "Postgres (Log Failure)", "type": "main", "index": 0 } ]
+      ]
+    },
+    "Postgres (Store Mapping)": {
+      "main": [ [ { "node": "Postgres (Update Status)", "type": "main", "index": 0 } ] ]
+    },
+    "Postgres (Update Status)": {
+      "main": [ [ { "node": "Split In Batches", "type": "main", "index": 0 } ] ]
+    },
+    "Postgres (Log Failure)": {
+      "main": [ [ { "node": "Split In Batches", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}

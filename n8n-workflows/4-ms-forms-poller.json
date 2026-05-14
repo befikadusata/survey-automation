@@ -1,0 +1,95 @@
+{
+  "name": "4. MS Forms Poller",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [ { "field": "minutes", "expression": 5 } ]
+        }
+      },
+      "id": "1",
+      "name": "Schedule (Every 5m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, metadata->>'excel_id' as excel_id FROM surveys WHERE form_provider = 'ms_forms' AND status = 'active';"
+      },
+      "id": "2",
+      "name": "Postgres (Active Surveys)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [ 450, 300 ],
+      "credentials": {
+        "postgres": { "id": "postgres", "name": "Postgres" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "workbook",
+        "operation": "getAll",
+        "workbookId": {
+          "__rl": true,
+          "value": "={{ $json.excel_id }}",
+          "mode": "id"
+        },
+        "worksheetId": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Microsoft Excel",
+      "type": "n8n-nodes-base.microsoftExcel",
+      "typeVersion": 1,
+      "position": [ 650, 300 ],
+      "credentials": {
+        "microsoftExcelOAuth2Api": { "id": "microsoft_excel", "name": "Microsoft Excel account" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXTAUTH_URL }}/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "email", "value": "={{ $json.Email }}" },
+            { "name": "source", "value": "ms_graph" },
+            { "name": "event_type", "value": "completed" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4",
+      "name": "HTTP Request (Mark Completed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [ 850, 300 ]
+    }
+  ],
+  "connections": {
+    "Schedule (Every 5m)": {
+      "main": [ [ { "node": "Postgres (Active Surveys)", "type": "main", "index": 0 } ] ]
+    },
+    "Postgres (Active Surveys)": {
+      "main": [ [ { "node": "Microsoft Excel", "type": "main", "index": 0 } ] ]
+    },
+    "Microsoft Excel": {
+      "main": [ [ { "node": "HTTP Request (Mark Completed)", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}

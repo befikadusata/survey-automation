@@ -1,0 +1,94 @@
+{
+  "name": "3. Google Forms Poller",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [ { "field": "minutes", "expression": 5 } ]
+        }
+      },
+      "id": "1",
+      "name": "Schedule (Every 5m)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, metadata->>'sheet_id' as sheet_id FROM surveys WHERE form_provider = 'google_forms' AND status = 'active';"
+      },
+      "id": "2",
+      "name": "Postgres (Active Surveys)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.3,
+      "position": [ 450, 300 ],
+      "credentials": {
+        "postgres": { "id": "postgres", "name": "Postgres" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Form Responses 1",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.2,
+      "position": [ 650, 300 ],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "google_sheets", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXTAUTH_URL }}/api/webhooks/n8n",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Webhook-Secret", "value": "={{ $env.WEBHOOK_SECRET }}" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "token", "value": "={{ $json.token }}" },
+            { "name": "source", "value": "google_sheets" },
+            { "name": "event_type", "value": "completed" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4",
+      "name": "HTTP Request (Mark Completed)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [ 850, 300 ]
+    }
+  ],
+  "connections": {
+    "Schedule (Every 5m)": {
+      "main": [ [ { "node": "Postgres (Active Surveys)", "type": "main", "index": 0 } ] ]
+    },
+    "Postgres (Active Surveys)": {
+      "main": [ [ { "node": "Google Sheets", "type": "main", "index": 0 } ] ]
+    },
+    "Google Sheets": {
+      "main": [ [ { "node": "HTTP Request (Mark Completed)", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
