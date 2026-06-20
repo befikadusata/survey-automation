@@ -134,6 +134,3 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
-rnal server error' }, { status: 500 });
-  }
-}

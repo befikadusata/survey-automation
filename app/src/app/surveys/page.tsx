@@ -69,7 +69,7 @@ export default function SurveysPage() {
   useEffect(() => {
     fetch('/api/surveys')
       .then(r => r.json())
-      .then(data => { setSurveys(data); setLoading(false); })
+      .then(data => { setSurveys(data.data); setLoading(false); })
       .catch(() => { setError('Failed to load surveys'); setLoading(false); });
   }, []);
 

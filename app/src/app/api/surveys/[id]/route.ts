@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '@/lib/db';
+import { Api } from '@/lib/api-response';
+import { ensureAuth } from '@/lib/auth-util';
 import { isValidSurveyTransition } from '@/lib/transitions';
 import { logger } from '@/lib/log';
 import { SurveyWithStats } from '@/types';
@@ -8,6 +10,9 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: Request, { params }: Params) {
   try {
+    const { authenticated, response: authResponse } = await ensureAuth();
+    if (!authenticated) return authResponse;
+
     const { id } = await params;
     const result = await query<SurveyWithStats>(`
       SELECT
@@ -27,9 +32,9 @@ export async function GET(_req: Request, { params }: Params) {
     `, [id]);
 
     if (!result.rows[0]) {
-      return NextResponse.json({ error: 'Survey not found' }, { status: 404 });
+      return Api.error('Survey not found', 404);
     }
-    return NextResponse.json(result.rows[0]);
+    return Api.success(result.rows[0]);
   } catch (err) {
     logger.error('Get survey failed', {
       route: 'GET /api/surveys/[id]',

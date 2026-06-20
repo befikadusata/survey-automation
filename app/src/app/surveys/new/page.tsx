@@ -46,7 +46,7 @@ export default function NewSurveyPage() {
       }
 
       const survey = await res.json();
-      router.push(`/surveys/${survey.id}/overview`);
+      router.push(`/surveys/${survey.data.id}/overview`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setLoading(false);

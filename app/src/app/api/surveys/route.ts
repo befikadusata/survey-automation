@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-...
+    const result = SurveySchema.safeParse(body);
 
     if (!result.success) {
       return Api.error('Invalid survey data', 400, 'VALIDATION_ERROR', { issues: result.error.issues });

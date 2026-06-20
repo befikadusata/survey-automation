@@ -34,7 +34,6 @@ function log(entry: LogEntry): void {
   const timestamp = new Date().toISOString();
   const sanitizedEntry = sanitize(entry);
   const base = { timestamp, ...sanitizedEntry };
-...
   const method = entry.level === 'error' ? console.error
     : entry.level === 'warn' ? console.warn
     : entry.level === 'debug' ? console.debug

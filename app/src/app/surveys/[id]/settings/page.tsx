@@ -16,7 +16,7 @@ export default function SettingsPage() {
     if (!params?.id) return;
     fetch(`/api/surveys/${params.id}`)
       .then(r => r.json())
-      .then(data => { setForm(data); setLoading(false); })
+      .then(data => { setForm(data.data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [params?.id]);
 

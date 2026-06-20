@@ -35,7 +35,7 @@ export default function OverviewPage() {
     const load = () => {
       fetch(`/api/surveys/${params.id}`)
         .then(r => r.json())
-        .then(data => { setSurvey(data); setLoading(false); })
+        .then(data => { setSurvey(data.data); setLoading(false); })
         .catch(() => setLoading(false));
     };
     load();
